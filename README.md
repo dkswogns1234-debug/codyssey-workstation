@@ -46,7 +46,7 @@
 - [x] 바인드 마운트 반영 (호스트 수정 → 재시작 없이 반영)
 - [x] 볼륨 영속성 (컨테이너 삭제 후에도 데이터 유지, 대조군 포함)
 - [x] Git 설정 (user.name / user.email / init.defaultBranch=main)
-- [ ] VSCode GitHub 로그인 및 저장소 연동 → [스크린샷 위치](#9-git-설정-및-githubvscode-연동)
+- [x] VSCode에서 GitHub 저장소 연동 (Publish Branch → Public 전환) → [증거](#9-git-설정-및-githubvscode-연동)
 - [x] (보너스) Docker Compose 단일·멀티 컨테이너, up/down/ps/logs, 환경변수
 
 ## 3. 프로젝트 구조
@@ -410,9 +410,21 @@ main
 
 > 시스템 설정(`Program Files/Git/etc/gitconfig`)에는 `init.defaultbranch=master`가 있습니다. 하지만 사용자 설정(`~/.gitconfig`)이 우선 적용되므로 실제 기본 브랜치는 `main`입니다.
 
-**VSCode GitHub 로그인 및 저장소 연동**
+**GitHub 저장소 연동**
 
-![VSCode GitHub 연동](docs/screenshots/vscode-github.png)
+VSCode의 **Publish Branch**로 로컬 저장소를 GitHub에 올렸고, 이후 저장소를 공개로 전환했습니다.
+
+```bash
+$ git remote -v
+origin	https://github.com/dkswogns1234-debug/codyssey-workstation.git (fetch)
+origin	https://github.com/dkswogns1234-debug/codyssey-workstation.git (push)
+$ git status -sb | head -1
+## main...origin/main                  # 로컬 main과 원격 main이 동기화됨
+$ curl -s -o /dev/null -w "%{http_code}\n" https://github.com/dkswogns1234-debug/codyssey-workstation
+200                                    # 로그인 없이 접근 가능 (Public)
+```
+
+![GitHub 저장소 페이지 (Public, main 브랜치 push 완료)](docs/screenshots/github-repo.png)
 
 ### Git과 GitHub의 역할 차이
 
