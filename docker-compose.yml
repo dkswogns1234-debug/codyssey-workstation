@@ -1,0 +1,23 @@
+# 보너스: 웹 서버 + 보조 서비스(헬스 체커) 멀티 컨테이너
+services:
+  web:
+    build: .
+    image: codyssey-web:1.0
+    container_name: cw-web
+    environment:
+      APP_ENV: ${APP_ENV:-dev}          # 환경변수로 실행 모드 주입
+    ports:
+      - "${WEB_PORT:-8090}:80"          # 환경변수로 호스트 포트 변경
+    volumes:
+      - web-logs:/var/log/nginx-extra   # 이름 있는 볼륨 연결
+
+  checker:
+    image: alpine:3.20
+    container_name: cw-checker
+    depends_on:
+      - web
+    # 서비스 이름(web)으로 다른 컨테이너에 접근 → Compose 기본 네트워크의 DNS(서비스 디스커버리)
+    command: sh -c 'while true; do echo "[checker] $$(date +%T) $$(wget -qO- http://web/health)"; sleep 5; done'
+
+volumes:
+  web-logs:
