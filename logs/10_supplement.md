@@ -81,3 +81,92 @@ $ git status -sb | head -1
 ## main...origin/main
 
 ```
+
+## 2차 보완 (2026-11-14, 사전평가 100% 이후 보완 의견 반영)
+
+### 볼륨 권한·소유권 확인 (#8)
+
+```bash
+$ date "+%F %T"
+2026-11-14 18:28:33
+
+$ docker volume inspect codyssey-data --format "Mountpoint={{.Mountpoint}}"
+Mountpoint=/var/lib/docker/volumes/codyssey-data/_data
+
+$ docker run --rm -v codyssey-data:/data ubuntu:24.04 ls -ld /data
+drwxr-xr-x 2 root root 4096 Nov  9 11:25 /data
+
+$ docker run --rm -v codyssey-data:/data ubuntu:24.04 ls -ln /data
+total 4
+-rw-r--r-- 1 0 0 34 Nov  9 11:25 hello.txt
+
+$ docker run --rm --user 1000:1000 -v codyssey-data:/data ubuntu:24.04 sh -c "touch /data/by-uid1000.txt" ; echo "exit=$?"
+touch: cannot touch '/data/by-uid1000.txt': Permission denied
+exit=1
+
+$ docker run --rm -v codyssey-data:/data ubuntu:24.04 chown 1000:1000 /data  # 해결: 볼륨 디렉토리 소유자를 컨테이너 사용자로
+
+$ docker run --rm --user 1000:1000 -v codyssey-data:/data ubuntu:24.04 sh -c "touch /data/by-uid1000.txt && ls -ln /data"
+total 4
+-rw-r--r-- 1 1000 1000  0 Nov 14 09:29 by-uid1000.txt
+-rw-r--r-- 1    0    0 34 Nov  9 11:25 hello.txt
+
+$ docker run --rm -v codyssey-data:/data ubuntu:24.04 sh -c "rm /data/by-uid1000.txt && chown 0:0 /data && ls -ld /data"  # 실습 후 원래 상태로 복구
+drwxr-xr-x 2 root root 4096 Nov 14 09:29 /data
+
+```
+
+### 네트워크 모드 비교: bridge vs none (#13)
+
+```bash
+$ docker run --rm alpine:3.20 ip -4 -o addr show
+1: lo    inet 127.0.0.1/8 scope host lo\       valid_lft forever preferred_lft forever
+2: eth0    inet 172.17.0.2/16 brd 172.17.255.255 scope global eth0\       valid_lft forever preferred_lft forever
+
+$ docker run --rm --network none alpine:3.20 ip -4 -o addr show
+1: lo    inet 127.0.0.1/8 scope host lo\       valid_lft forever preferred_lft forever
+
+$ docker run --rm --network none alpine:3.20 wget -q -T 3 -O /dev/null http://example.com ; echo "exit=$?"
+wget: bad address 'example.com'
+exit=1
+
+```
+
+### 권한 숫자 읽기 예시 (#15, WSL Ubuntu)
+
+```bash
+$ touch read_demo.txt && mkdir -p team_dir
+
+$ chmod 640 read_demo.txt && stat -c "%A %a %n" read_demo.txt  # 6=rw-(나) 4=r--(그룹) 0=---(기타): 팀원만 읽는 설정 파일
+-rw-r----- 640 read_demo.txt
+
+$ chmod 750 team_dir && stat -c "%A %a %n" team_dir  # 7=rwx 5=r-x 0=---: 그룹은 들어가 읽기만, 기타는 접근 불가
+drwxr-x--- 750 team_dir
+
+$ ls -ld /tmp  # 맨 끝 t = sticky bit(1777): 누구나 쓰지만 남의 파일은 못 지움
+drwxrwxrwt 8 root root 160 Nov 14 18:29 /tmp
+
+$ rm -r read_demo.txt team_dir
+
+```
+
+### 데몬 빠른 점검 3개 · 원격 상태 (2026-11-14)
+
+```bash
+$ date "+%F %T"
+2026-11-14 18:33:42
+
+$ docker version --format '{{.Server.Version}}'
+29.9.3
+
+$ docker info --format '{{.ServerVersion}}'
+29.9.3
+
+$ wsl -l -v | tr -d "\000" | grep -E "NAME|docker-desktop"
+  NAME              STATE           VERSION
+  docker-desktop    Running         2
+
+$ git fetch -q origin && git log --oneline -1 origin/main
+5d7208d 사전평가 보완: 포트 충돌 진단·해제 절차 문서화 및 항목별 보완
+
+```

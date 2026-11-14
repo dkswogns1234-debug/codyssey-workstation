@@ -20,6 +20,25 @@
 | 포트 충돌 진단 | 충돌 재현 → 점유 주체 확인(`netstat`/`tasklist`, `ss`/`lsof`) → 해제 → 재시도 | [09_port_conflict.md](logs/09_port_conflict.md) |
 | 보완 기록 | hello-world 직후 `ps -a`, `docker inspect` 요약, 이미지 vs 컨테이너 변경 실험 | [10_supplement.md](logs/10_supplement.md) |
 
+### 한눈에 보기: 핵심 명령 → 실제 결과
+
+| 단계 | 명령 | 결과 (실제 출력 요약) | 로그 |
+|---|---|---|---|
+| 파일 조작 | `touch` → `cp` → `mv` → `rm` | `docs/memo_copy.txt` 생성, `renamed.txt` 이동 후 삭제 | [01](logs/01_terminal.md) |
+| 숨김 파일 | `ls` vs `ls -a` | `.secret`은 `ls -a`에서만 보임 | [01](logs/01_terminal.md) |
+| 파일 권한 | `chmod 755 perm_file.txt` | `-rw-r--r--` → `-rwxr-xr-x` | [02](logs/02_permission.md) |
+| 폴더 권한 | `chmod 644 perm_dir; cd perm_dir` | `Permission denied` (x 없음) | [02](logs/02_permission.md) |
+| Docker 점검 | `docker --version` / `docker info` | `29.9.3` / `Server Version: 29.9.3` | [03](logs/03_docker_basic.md) |
+| hello-world | `docker run hello-world` | `Hello from Docker!` | [03](logs/03_docker_basic.md) |
+| 이미지 목록 | `docker images` | `hello-world` c567b231f656 · `nginx:1.27-alpine` 65645c7bb6a0 · `ubuntu:24.04` fe81560990fa · `codyssey-web:1.0` 50273fab5627 | [03](logs/03_docker_basic.md), [10](logs/10_supplement.md) |
+| 컨테이너 목록 | `docker ps -a` | `ubu` 07ae4b8674ce `Exited (137)` · `hello-check` 2323ef8abc94 (2026-11-14 18:16:02) `Exited (0)` | [04](logs/04_container_ops.md), [10](logs/10_supplement.md) |
+| 이미지 빌드 | `docker build -t codyssey-web:1.0 .` | `naming to docker.io/library/codyssey-web:1.0 done` | [05](logs/05_build_port.md) |
+| 포트 매핑 | `curl -sI localhost:8080` / `8081` | `200 OK` · `X-App-Env: dev` / `prod` | [05](logs/05_build_port.md) |
+| 바인드 마운트 | 호스트 파일 v1→v2 수정 후 `curl` | 재시작 없이 `BIND v2` | [06](logs/06_bind_volume.md) |
+| 볼륨 | 삭제 후 새 컨테이너에서 `cat` | `persist me - 2026-11-09T11:25:29Z` 그대로 | [06](logs/06_bind_volume.md) |
+| 포트 충돌 | 같은 포트로 `docker run` | `port is already allocated` → 점유 컨테이너 stop 후 `200` | [09](logs/09_port_conflict.md) |
+| Git | `git push origin main` → `git log -1 origin/main` | push 후 원격 `main` = `5d7208d` (1차 보완 커밋) | [08](logs/08_git.md), [10](logs/10_supplement.md) |
+
 ## 1. 실행 환경
 
 | 항목 | 값 |
@@ -77,6 +96,8 @@ codyssey-workstation/
 | `logs/` | 명령과 출력을 그대로 남긴 실행 기록 (`rec.sh`로 생성) | 편집·요약한 결과 |
 | `docs/screenshots/` | 브라우저·GitHub 화면 등 터미널 밖 증거 | 인증 코드·토큰이 보이는 화면 |
 
+**설계 기준**: ‘이미지에 들어가는가’와 ‘얼마나 자주 바뀌고 보존해야 하는가’로 나눴습니다. 이미지에 굽는 것(`app/`), 실행 중 호스트와 연결하는 것(`bind-demo/`), 실행 증거(`logs/`, `docs/`)를 분리해, 빌드 컨텍스트는 작게(`.dockerignore`) 유지하고 증거는 저장소에 남겼습니다.
+
 ---
 
 ## 4. 터미널 조작 로그
@@ -132,6 +153,7 @@ $ cd ~/codyssey/practice         # 절대 경로(~ = /home/dkswo): 어디서 실
 - **절대 경로**는 루트(`/`)에서 시작하는 전체 주소입니다(`/home/dkswo/codyssey/practice`). 현재 위치와 상관없이 항상 같은 대상을 가리켜서 스크립트나 설정 파일에 적합합니다.
 - **상대 경로**는 현재 위치를 기준으로 합니다(`docs`, `../practice`). 짧게 쓸 수 있지만, 실행 위치가 바뀌면 다른 대상을 가리키거나 경로를 찾지 못할 수 있습니다.
 - **사용 규칙**: 실행 위치가 매번 달라질 수 있는 것(cron, 다른 폴더에서 호출되는 스크립트, 시스템 설정)에는 **절대 경로**를 쓰고, 저장소 안 파일끼리 참조하는 것(README 링크, Dockerfile `COPY`, compose의 `build: .`)에는 **저장소 기준 상대 경로**를 씁니다. 그래야 다른 PC에 clone해도 그대로 동작합니다.
+- **같은 폴더의 환경별 표기**: Windows `C:\Users\<이름>\Desktop` · Git Bash `/c/Users/<이름>/Desktop` (Docker 인자에는 `C:/Users/...` 형식 권장) · WSL `/mnt/c/Users/<이름>/Desktop` · WSL 홈 `~` = `/home/<이름>` (Windows 탐색기에서는 `\\wsl$\Ubuntu\home\<이름>`)
 
 ## 5. 권한 실습
 
@@ -142,11 +164,11 @@ $ cd ~/codyssey/practice         # 절대 경로(~ = /home/dkswo): 어디서 실
 ```bash
 $ stat -c "%A %a %n" perm_file.txt
 -rw-r--r-- 644 perm_file.txt                 # 변경 전
-$ chmod 755 perm_file.txt && ls -l perm_file.txt
+$ chmod 755 perm_file.txt && ls -l perm_file.txt    # 의도: 스크립트처럼 실행 가능하게 (나만 수정, 모두 실행)
 -rwxr-xr-x 1 dkswo dkswo 5 Nov  9 20:22 perm_file.txt
-$ chmod 600 perm_file.txt && ls -l perm_file.txt
+$ chmod 600 perm_file.txt && ls -l perm_file.txt    # 의도: 비밀키·.env처럼 나만 읽고 쓰기
 -rw------- 1 dkswo dkswo 5 Nov  9 20:22 perm_file.txt
-$ chmod u=rw,g=r,o=r perm_file.txt && stat -c "%A %a %n" perm_file.txt
+$ chmod u=rw,g=r,o=r perm_file.txt && stat -c "%A %a %n" perm_file.txt    # 의도: 기호 방식으로 일반 문서(644)로 되돌리기
 -rw-r--r-- 644 perm_file.txt                 # 기호 방식으로 원복
 ```
 
@@ -155,16 +177,16 @@ $ chmod u=rw,g=r,o=r perm_file.txt && stat -c "%A %a %n" perm_file.txt
 ```bash
 $ ls -ld perm_dir
 drwxr-xr-x 2 dkswo dkswo 4096 Nov  9 20:22 perm_dir      # 변경 전 755
-$ chmod 700 perm_dir && ls -ld perm_dir
+$ chmod 700 perm_dir && ls -ld perm_dir    # 의도: 나만 들어가는 개인 폴더
 drwx------ 2 dkswo dkswo 4096 Nov  9 20:22 perm_dir      # 소유자만 접근
-$ chmod 644 perm_dir && ls -ld perm_dir
+$ chmod 644 perm_dir && ls -ld perm_dir    # 의도: x를 빼면 폴더에 못 들어가는지 실험
 drw-r--r-- 2 dkswo dkswo 4096 Nov  9 20:22 perm_dir      # x 제거
 $ cd perm_dir; echo "exit=$?"
 cd: perm_dir: Permission denied
 exit=1
 $ ls -l perm_dir
 -????????? ? ? ? ?            ? a.txt                     # 이름(r)은 보이지만 속성은 못 읽음
-$ chmod 755 perm_dir && cd perm_dir && pwd
+$ chmod 755 perm_dir && cd perm_dir && pwd    # 의도: 실습 후 원래 권한으로 복구
 /home/dkswo/codyssey/practice/perm_dir                   # 원복 후 진입 성공
 ```
 
@@ -178,6 +200,7 @@ $ chmod 755 perm_dir && cd perm_dir && pwd
 - 디렉토리에서는 의미가 다릅니다. **r**은 목록 보기, **w**는 안에서 생성·삭제, **x**는 진입(`cd`)과 안쪽 파일 접근입니다. 그래서 위 실험처럼 `644` 디렉토리는 이름만 보이고 들어갈 수 없습니다.
 - **실습한 변경과 쓰임새**: `644→755`는 스크립트를 실행 가능하게 만들 때(`./run.sh`), `600`은 SSH 개인키·`.env`처럼 나만 읽어야 하는 파일, 디렉토리 `700`은 다른 사용자가 들어오면 안 되는 개인 폴더에 해당합니다.
 - **특수 권한(참고)**: 앞자리에 붙는 setuid(`4xxx`, 실행 시 소유자 권한으로 동작, 예: `passwd`), setgid(`2xxx`), sticky bit(`1xxx`, 예: `/tmp`의 `drwxrwxrwt`, 남의 파일 삭제 금지)도 있습니다. 이번 실습 범위에서는 사용하지 않았습니다.
+- **숫자 읽기 연습** (WSL 실측, [10](logs/10_supplement.md)): `640` → `-rw-r-----` (나 rw / 그룹 r / 기타 없음: 팀원만 읽는 설정 파일) · `750` → `drwxr-x---` (그룹은 들어가서 읽기만, 기타 접근 불가) · `/tmp` → `drwxrwxrwt` (끝의 `t`가 sticky bit)
 
 ---
 
@@ -186,6 +209,8 @@ $ chmod 755 perm_dir && cd perm_dir && pwd
 전체 로그: [logs/03_docker_basic.md](logs/03_docker_basic.md), [logs/04_container_ops.md](logs/04_container_ops.md)
 
 ### 설치·데몬 점검
+
+> **데몬 빠른 점검 (명령 3개)**: ① `docker version --format '{{.Server.Version}}'` → 버전이 나오면 엔진 연결 OK ② `docker info --format '{{.ServerVersion}}'` → 같은 확인을 info로 ③ PowerShell `wsl -l -v` → `docker-desktop`이 `Running`. 2026-11-14 확인 결과 `29.9.3` / `29.9.3` / `docker-desktop Running` ([10 로그](logs/10_supplement.md)). 실패하면 [트러블슈팅 1](#트러블슈팅-1--docker-데몬에-연결할-수-없음)의 복구 순서.
 
 ```bash
 $ docker --version
@@ -214,12 +239,19 @@ nginx:1.27-alpine    65645c7bb6a0       74.5MB         21.9MB
 ubuntu:24.04         fe81560990fa        119MB         31.7MB
 ```
 
-> **보완 (2026-11-14 18:16)**: hello-world 실행 직후 컨테이너가 어떻게 남는지 따로 확인했습니다. `/hello`를 실행하고 바로 `Exited (0)`로 끝난 컨테이너가 `ps -a`에 생성 시각과 함께 남습니다. [10_supplement.md](logs/10_supplement.md)
->
-> ```
-> CONTAINER ID   IMAGE         COMMAND    CREATED AT                      STATUS
-> 2323ef8abc94   hello-world   "/hello"   2026-11-14 18:16:02 +0900 KST   Exited (0) Less than a second ago
-> ```
+**hello-world 직후 컨테이너 상태** (2026-11-14 18:16 재실행, [10_supplement.md](logs/10_supplement.md))
+
+```bash
+$ docker run --name hello-check hello-world | head -3
+
+Hello from Docker!
+This message shows that your installation appears to be working correctly.
+$ docker ps -a --filter "name=hello-check" --format "table {{.ID}}\t{{.Image}}\t{{.Command}}\t{{.CreatedAt}}\t{{.Status}}"
+CONTAINER ID   IMAGE         COMMAND    CREATED AT                      STATUS
+2323ef8abc94   hello-world   "/hello"   2026-11-14 18:16:02 +0900 KST   Exited (0) Less than a second ago
+```
+
+`/hello` 프로그램이 메시지를 출력하고 끝나서, 컨테이너는 `Exited (0)`로 남습니다. `docker rm` 하기 전까지 `ps -a`에 보입니다.
 
 ### ubuntu 컨테이너 내부 진입 후 명령 실행
 
@@ -309,6 +341,8 @@ EXPOSE 80
 
 ### 빌드·실행 및 포트 매핑 접속 (2회)
 
+전체 빌드 로그(BuildKit 단계별 출력): [logs/05_build_port.md](logs/05_build_port.md) — `[1/3] FROM nginx:1.27-alpine` → `[2/3] COPY app/conf/default.conf` → `[3/3] COPY app/site/` → `naming to docker.io/library/codyssey-web:1.0 done`
+
 ```bash
 $ docker build -t codyssey-web:1.0 .
 #6 [2/3] COPY app/conf/default.conf /etc/nginx/templates/default.conf.template
@@ -349,6 +383,13 @@ $ docker logs web-8080 2>&1 | tail -2
 | ExposedPorts | `80/tcp` |
 | Labels | `org.opencontainers.image.title=codyssey-web` |
 
+**접속 확인 타임라인 (curl → 브라우저)**
+
+| 시각 (KST) | 확인 | 결과 | 근거 |
+|---|---|---|---|
+| 2026-11-09 20:25:04 | `curl -sI http://localhost:8080` | `HTTP/1.1 200 OK`, `X-App-Env: dev` | nginx 접근 로그 `[09/Nov/2026:11:25:04 +0000]`(UTC) · [05](logs/05_build_port.md) |
+| 2026-11-09 20:47:29 | 브라우저 `localhost:8080` | 커스텀 페이지 표시 (아래 캡처) | 캡처 파일 저장 시각 |
+
 **브라우저 접속 화면 (주소창 포함)**
 
 ![localhost:8080 브라우저 접속](docs/screenshots/browser-8080.png)
@@ -363,6 +404,14 @@ $ docker logs web-8080 2>&1 | tail -2
   localhost:8081  ──────────▶  호스트 8081 → 포트 포워딩  ──────────▶  web-8081  nginx :80
 ```
 
+**네트워크 모드 비교** (bridge·none 실측, [10](logs/10_supplement.md))
+
+| 모드 | 컨테이너가 받는 주소 | 외부 접근 | 이번 결과 |
+|---|---|---|---|
+| `bridge` (기본) | 별도 사설 IP | 호스트·외부 → 컨테이너는 `-p`로 매핑한 포트만 (컨테이너 → 외부, 같은 네트워크의 컨테이너끼리는 매핑 없이 가능) | `eth0 172.17.0.2/16` |
+| `none` | 루프백(`lo`)만 | 들어오고 나가는 통신 모두 불가 | `lo 127.0.0.1`만, `wget: bad address 'example.com'` |
+| `host` | 호스트 네트워크를 그대로 사용 | `-p` 없이 호스트 포트에 바로 열림 (Linux 기준) | 사용 안 함: Docker Desktop은 컨테이너가 VM 안에서 돌아 동작이 다름 |
+
 **접속이 안 될 때 점검 순서**
 
 1. `docker ps` — 컨테이너가 `Up`인지, `PORTS`에 `0.0.0.0:8080->80/tcp`가 있는지
@@ -370,6 +419,19 @@ $ docker logs web-8080 2>&1 | tail -2
 3. `curl -s -m 3 -I http://localhost:8080` — 시간 제한(`-m`)을 두고 응답 코드 확인 (제한이 없으면 기동 중에 응답을 무한정 기다릴 수 있음, 아래 로그 참고)
 4. 실행 자체가 `port is already allocated`로 실패하면 → 아래 **포트 충돌 진단**
 5. 급하면 다른 호스트 포트로 우회: `docker run -d -p 8090:80 ...` 후 `localhost:8090`
+
+**포트 충돌 의사결정 트리**
+
+```
+port is already allocated / Address already in use
+└─ docker ps --filter publish=<포트> 에 컨테이너가 나오나?
+   ├─ 예  → 그 컨테이너가 지금 필요한가?
+   │        ├─ 아니오 → docker stop / docker rm -f <이름> 후 재시도
+   │        └─ 예     → 내 컨테이너를 다른 호스트 포트로 (-p 8090:80)
+   └─ 아니오 → netstat -ano (Windows) / ss -ltnp (Linux) 로 PID → 프로그램 이름 확인
+            ├─ Docker 관련 (com.docker.backend, wslrelay) → 종료 금지: 다른 포트 또는 Docker Desktop 재시작
+            └─ 일반 프로그램 → 불필요하면 taskkill /PID <PID> /F · kill <PID>, 필요하면 다른 포트
+```
 
 ### 포트 충돌 진단과 해제
 
@@ -493,7 +555,23 @@ cat: /tmp/x.txt: No such file or directory   # 컨테이너 레이어에만 쓴 
 | 단점 | 호스트 경로·OS(Windows 경로 표기)에 종속 | 호스트에서 파일을 바로 보기 불편 |
 | 권장 | **개발**: 소스 코드·정적 파일을 고치며 확인할 때 | **운영**: DB 데이터·업로드 파일처럼 보존해야 할 데이터 |
 
+**바인드 vs 볼륨 선택 체크리스트**
+
+- 호스트에서 파일을 직접 고치며 바로 확인해야 한다 → **바인드 마운트** (개발)
+- 설정 파일 하나만 컨테이너에 읽기 전용으로 넣는다 → **바인드 마운트 `:ro`**
+- 컨테이너를 교체·업데이트해도 데이터가 남아야 한다 → **볼륨** (운영)
+- 여러 PC/서버에서 경로 차이 없이 같은 설정으로 돌아야 한다 → **볼륨**
+
+**볼륨 권한 체크포인트** ([10 실측](logs/10_supplement.md)): 볼륨 디렉토리는 기본 `root:root`(`drwxr-xr-x`)라서 `--user 1000:1000`처럼 일반 사용자로 실행한 컨테이너는 쓰기에서 `Permission denied`가 납니다. 확인은 `docker run --rm -v <볼륨>:/data ubuntu:24.04 ls -ld /data`, 해결은 디렉토리 소유자를 실행 사용자에 맞추기(`chown 1000:1000 /data`)입니다. 실습 후 원래 소유자로 되돌렸습니다.
+
 **이미지 변경 vs 컨테이너 변경** ([10_supplement.md](logs/10_supplement.md)): 컨테이너 안에서 `docker exec`로 `index.html`을 `changed-in-container`로 바꿔도, 그 컨테이너를 지우고 같은 이미지로 새로 띄우면 원래 `<h1>Hello, Codyssey! 🐳</h1>`가 나옵니다. 변경은 그 컨테이너의 쓰기 레이어에만 있었기 때문입니다. 내용을 영구히 바꾸려면 `app/site/`를 고친 뒤 `docker build`로 **이미지를 다시 빌드**해야 합니다.
+
+```
+Dockerfile ──build──▶ 이미지 (읽기 전용, 여러 컨테이너가 공유)
+                        ├──run──▶ 컨테이너 A = 이미지 + 쓰기 레이어 A   ← exec로 바꾼 내용은 여기에만
+                        └──run──▶ 컨테이너 B = 이미지 + 쓰기 레이어 B
+컨테이너 rm → 그 쓰기 레이어만 삭제, 이미지는 그대로  ⇒  영구 변경은 소스 수정 후 재빌드
+```
 
 ---
 
@@ -548,6 +626,8 @@ d96dc63 개발 워크스테이션 미션: 터미널/권한/Docker/Dockerfile/포
 
 위 출력은 2026-11-14 실제 터미널 실행 결과를 옮긴 것이며, 실행 후 이력은 [10 로그](logs/10_supplement.md)에 `git log`로 남겼습니다. 사전평가 보완 내용도 같은 흐름(`add → commit → push`)으로 반영합니다. 최신 이력은 저장소의 Commits 탭에서 확인할 수 있습니다.
 
+**원격 동기화가 실패할 때 체크포인트**: ① `git remote -v`로 URL·계정 오타 확인 ② `git status -sb`로 ahead/behind 확인, behind면 `git pull --rebase` 후 push ③ `Authentication failed`·`403`이면 자격 증명 확인 (Windows 자격 증명 관리자의 github.com 항목, 또는 VS Code에서 GitHub 재로그인) ④ `Repository not found`면 저장소 이름·공개 여부·접근 권한 확인
+
 ### Git과 GitHub의 역할 차이
 
 - **Git**은 내 PC에서 동작하는 **로컬 버전 관리 도구**입니다. 커밋, 브랜치, 이력 조회가 인터넷 없이도 됩니다.
@@ -599,6 +679,22 @@ $ docker compose down
 | 2 | 경로 앞에 `C:/Program Files/Git` | 오류 메시지의 경로 확인 | 1분 (`MSYS_NO_PATHCONV=1`) |
 | 2 | `port is already allocated` | `docker ps --filter publish=<포트>`, `netstat -ano` | 2~5분 (트러블슈팅 5) |
 | 3 (기록만 불편) | `--format`의 `\n` 미해석 | 출력 확인 | 1분 (`grep`으로 대체) |
+
+**핵심 명령 모음**
+
+```bash
+# 1. 데몬 연결 실패
+docker info --format '{{.ServerVersion}}'          # 실패 → Docker Desktop 실행 후 재시도
+# 2. Git Bash에서 chmod 미반영
+uname -a                                            # MINGW/MSYS면 → wsl -d Ubuntu 에서 실습
+# 3. 경로 앞에 C:/Program Files/Git이 붙음
+export MSYS_NO_PATHCONV=1
+# 4. --format 안의 줄바꿈 기호 미해석
+docker info | grep -E "Server Version|OSType"
+# 5. 포트 충돌
+docker ps --filter publish=8080                     # 컨테이너가 점유?
+netstat -ano | grep ":8080 "                        # Windows (Linux: ss -ltnp "sport = :8080")
+```
 
 ### 트러블슈팅 1 – Docker 데몬에 연결할 수 없음
 
@@ -673,6 +769,16 @@ $ docker compose down
 | 이미지 vs 컨테이너 | `docker exec`로 수정 후 새 컨테이너 | 수정은 사라지고 원본 유지 | [10](logs/10_supplement.md) |
 
 ## 13. 재현 방법
+
+**초보자용 최소 재현 (5단계)**
+
+1. `git clone https://github.com/dkswogns1234-debug/codyssey-workstation.git && cd codyssey-workstation`
+2. `docker build -t codyssey-web:1.0 .`
+3. `docker run -d -p 8080:80 --name web-8080 codyssey-web:1.0`
+4. 브라우저에서 `http://localhost:8080` → `Hello, Codyssey!`가 보이면 성공
+5. `docker rm -f web-8080` (정리)
+
+전체 버전:
 
 ```bash
 git clone <이 저장소 URL> && cd codyssey-workstation
