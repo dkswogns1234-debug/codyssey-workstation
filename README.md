@@ -112,7 +112,7 @@ memo.txt
 ### 절대 경로와 상대 경로
 
 ```bash
-$ cd docs && pwd                 # 상대 경로: 현재 위치 기준
+$ cd docs && pwd && cd ..        # 상대 경로: 현재 위치 기준 (확인 후 practice로 복귀)
 /home/dkswo/codyssey/practice/docs
 $ cd ../practice/docs && pwd     # ..(상위)를 거쳐 같은 곳으로
 /home/dkswo/codyssey/practice/docs
