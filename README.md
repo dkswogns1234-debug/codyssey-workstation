@@ -17,6 +17,8 @@
 | 바인드 마운트 / 볼륨 | 호스트 수정 즉시 반영, 컨테이너 삭제 후 데이터 유지 | [06_bind_volume.md](logs/06_bind_volume.md) |
 | (보너스) Compose | 멀티 컨테이너, 서비스 이름으로 통신, 환경변수 주입 | [07_compose_bonus.md](logs/07_compose_bonus.md) |
 | Git / GitHub | 사용자 정보·기본 브랜치 설정, VSCode에서 GitHub 연동 | [08_git.md](logs/08_git.md) |
+| 포트 충돌 진단 | 충돌 재현 → 점유 주체 확인(`netstat`/`tasklist`, `ss`/`lsof`) → 해제 → 재시도 | [09_port_conflict.md](logs/09_port_conflict.md) |
+| 보완 기록 | hello-world 직후 `ps -a`, `docker inspect` 요약, 이미지 vs 컨테이너 변경 실험 | [10_supplement.md](logs/10_supplement.md) |
 
 ## 1. 실행 환경
 
@@ -63,9 +65,17 @@ codyssey-workstation/
 ├── scripts/
 │   ├── rec.sh              # 명령과 출력을 로그 파일에 함께 기록하는 헬퍼
 │   └── 01_terminal_perm.sh # 터미널·권한 실습 스크립트 (WSL에서 실행)
-├── logs/                   # 단계별 전체 실행 로그 (01~08)
+├── logs/                   # 단계별 전체 실행 로그 (01~10)
 └── docs/screenshots/       # 브라우저 / VSCode 연동 스크린샷
 ```
+
+| 폴더 | 넣는 것 | 넣지 않는 것 |
+|---|---|---|
+| `app/` | 이미지에 들어갈 웹 콘텐츠와 nginx 설정 | 로그, 문서 (`.dockerignore`로 빌드에서 제외) |
+| `bind-demo/` | 바인드 마운트로 컨테이너에 연결할 호스트 파일 | 이미지에 굽는 파일 |
+| `scripts/` | 실습을 다시 실행하거나 기록하는 셸 스크립트 | 비밀번호·토큰 등 비밀 값 |
+| `logs/` | 명령과 출력을 그대로 남긴 실행 기록 (`rec.sh`로 생성) | 편집·요약한 결과 |
+| `docs/screenshots/` | 브라우저·GitHub 화면 등 터미널 밖 증거 | 인증 코드·토큰이 보이는 화면 |
 
 ---
 
@@ -121,6 +131,7 @@ $ cd ~/codyssey/practice         # 절대 경로(~ = /home/dkswo): 어디서 실
 
 - **절대 경로**는 루트(`/`)에서 시작하는 전체 주소입니다(`/home/dkswo/codyssey/practice`). 현재 위치와 상관없이 항상 같은 대상을 가리켜서 스크립트나 설정 파일에 적합합니다.
 - **상대 경로**는 현재 위치를 기준으로 합니다(`docs`, `../practice`). 짧게 쓸 수 있지만, 실행 위치가 바뀌면 다른 대상을 가리키거나 경로를 찾지 못할 수 있습니다.
+- **사용 규칙**: 실행 위치가 매번 달라질 수 있는 것(cron, 다른 폴더에서 호출되는 스크립트, 시스템 설정)에는 **절대 경로**를 쓰고, 저장소 안 파일끼리 참조하는 것(README 링크, Dockerfile `COPY`, compose의 `build: .`)에는 **저장소 기준 상대 경로**를 씁니다. 그래야 다른 PC에 clone해도 그대로 동작합니다.
 
 ## 5. 권한 실습
 
@@ -165,6 +176,8 @@ $ chmod 755 perm_dir && cd perm_dir && pwd
   - `644` = 6(4+2 → rw-) / 4(r--) / 4(r--): 소유자만 수정할 수 있습니다. 일반 문서에 씁니다.
   - `600` = 소유자만 읽고 쓸 수 있습니다. SSH 개인키처럼 민감한 파일에 씁니다.
 - 디렉토리에서는 의미가 다릅니다. **r**은 목록 보기, **w**는 안에서 생성·삭제, **x**는 진입(`cd`)과 안쪽 파일 접근입니다. 그래서 위 실험처럼 `644` 디렉토리는 이름만 보이고 들어갈 수 없습니다.
+- **실습한 변경과 쓰임새**: `644→755`는 스크립트를 실행 가능하게 만들 때(`./run.sh`), `600`은 SSH 개인키·`.env`처럼 나만 읽어야 하는 파일, 디렉토리 `700`은 다른 사용자가 들어오면 안 되는 개인 폴더에 해당합니다.
+- **특수 권한(참고)**: 앞자리에 붙는 setuid(`4xxx`, 실행 시 소유자 권한으로 동작, 예: `passwd`), setgid(`2xxx`), sticky bit(`1xxx`, 예: `/tmp`의 `drwxrwxrwt`, 남의 파일 삭제 금지)도 있습니다. 이번 실습 범위에서는 사용하지 않았습니다.
 
 ---
 
@@ -200,6 +213,13 @@ hello-world:latest   c567b231f656       25.9kB         9.49kB   U
 nginx:1.27-alpine    65645c7bb6a0       74.5MB         21.9MB
 ubuntu:24.04         fe81560990fa        119MB         31.7MB
 ```
+
+> **보완 (2026-11-14 18:16)**: hello-world 실행 직후 컨테이너가 어떻게 남는지 따로 확인했습니다. `/hello`를 실행하고 바로 `Exited (0)`로 끝난 컨테이너가 `ps -a`에 생성 시각과 함께 남습니다. [10_supplement.md](logs/10_supplement.md)
+>
+> ```
+> CONTAINER ID   IMAGE         COMMAND    CREATED AT                      STATUS
+> 2323ef8abc94   hello-world   "/hello"   2026-11-14 18:16:02 +0900 KST   Exited (0) Less than a second ago
+> ```
 
 ### ubuntu 컨테이너 내부 진입 후 명령 실행
 
@@ -280,7 +300,7 @@ EXPOSE 80
 
 | 커스텀 포인트 | 목적 |
 |---|---|
-| `FROM nginx:1.27-alpine` (태그 고정) | 가벼운 alpine 기반을 쓰고, 버전을 고정해서 언제 빌드해도 같은 결과가 나오게 함 |
+| `FROM nginx:1.27-alpine` (태그 고정) | 가벼운 alpine 기반을 쓰고, 버전 태그를 지정해 베이스 이미지가 바뀌는 범위를 줄임 (완전히 같은 빌드를 보장하려면 `@sha256:` digest로 고정) |
 | `LABEL` | 이미지의 이름과 용도를 메타데이터로 남겨 `docker inspect`로 확인할 수 있게 함 |
 | `ENV APP_ENV=dev` | 실행 모드의 기본값. `docker run -e APP_ENV=prod`로 코드 수정 없이 바꿀 수 있음 (설정과 코드 분리) |
 | 설정 템플릿 교체 (`templates/`) | nginx 공식 이미지의 envsubst 기능으로 `APP_ENV`를 응답 헤더 `X-App-Env`에 넣고, `/health` 엔드포인트 추가 |
@@ -320,6 +340,15 @@ $ docker logs web-8080 2>&1 | tail -2
 172.17.0.1 - - [09/Nov/2026:11:25:04 +0000] "GET / HTTP/1.1" 200 425 "-" "curl/8.23.0" "-"
 ```
 
+**빌드 결과 식별 (`docker image inspect` 요약, 2026-11-14 재확인)** · [10_supplement.md](logs/10_supplement.md)
+
+| 항목 | 값 |
+|---|---|
+| 태그 / 이미지 ID | `codyssey-web:1.0` / `sha256:50273fab5627…` |
+| Env | `APP_ENV=dev` (베이스 이미지의 `NGINX_VERSION=1.27.5` 등과 함께) |
+| ExposedPorts | `80/tcp` |
+| Labels | `org.opencontainers.image.title=codyssey-web` |
+
 **브라우저 접속 화면 (주소창 포함)**
 
 ![localhost:8080 브라우저 접속](docs/screenshots/browser-8080.png)
@@ -327,6 +356,74 @@ $ docker logs web-8080 2>&1 | tail -2
 ### 포트 매핑이 필요한 이유
 
 컨테이너는 자기만의 격리된 네트워크(예: `172.17.0.x`)를 가집니다. 그래서 nginx가 컨테이너 안에서 80번을 열어도 호스트에서는 바로 접근할 수 없습니다. `-p 8080:80`은 "호스트의 8080으로 들어온 요청을 컨테이너의 80으로 넘겨라"라는 연결 규칙입니다. 이 규칙 덕분에 **같은 이미지(컨테이너 내부 포트 80)를 호스트 포트만 바꿔서 여러 개** 띄울 수 있습니다(위의 8080과 8081).
+
+```
+  브라우저 / curl                    Docker Desktop                 컨테이너 (격리된 네트워크)
+  localhost:8080  ──────────▶  호스트 8080 → 포트 포워딩  ──────────▶  web-8080  nginx :80
+  localhost:8081  ──────────▶  호스트 8081 → 포트 포워딩  ──────────▶  web-8081  nginx :80
+```
+
+**접속이 안 될 때 점검 순서**
+
+1. `docker ps` — 컨테이너가 `Up`인지, `PORTS`에 `0.0.0.0:8080->80/tcp`가 있는지
+2. `docker logs web-8080` — nginx가 오류로 종료되지 않았는지
+3. `curl -s -m 3 -I http://localhost:8080` — 시간 제한(`-m`)을 두고 응답 코드 확인 (제한이 없으면 기동 중에 응답을 무한정 기다릴 수 있음, 아래 로그 참고)
+4. 실행 자체가 `port is already allocated`로 실패하면 → 아래 **포트 충돌 진단**
+5. 급하면 다른 호스트 포트로 우회: `docker run -d -p 8090:80 ...` 후 `localhost:8090`
+
+### 포트 충돌 진단과 해제
+
+전체 로그: [logs/09_port_conflict.md](logs/09_port_conflict.md). 충돌을 일부러 만들고 실제로 진단·해제했습니다.
+
+**A. 컨테이너끼리 같은 호스트 포트 (Windows + Git Bash)** · 로그 요약 발췌
+
+```bash
+$ docker run -d -p 8080:80 --name web-conflict codyssey-web:1.0    # web-8080이 이미 8080 사용 중
+docker: Error response from daemon: ... Bind for 0.0.0.0:8080 failed: port is already allocated
+
+$ docker ps --filter "publish=8080" --format "{{.Names}} -> {{.Ports}}"   # ① 어떤 컨테이너가 쓰는지
+web-8080 -> 0.0.0.0:8080->80/tcp, [::]:8080->80/tcp
+
+$ netstat -ano | grep -E "[:.]8080 .*LISTENING"                    # ② OS 수준에서 누가 LISTEN 중인지 (마지막 열 = PID)
+  TCP    0.0.0.0:8080           0.0.0.0:0              LISTENING       24124
+  TCP    127.0.0.1:8080         0.0.0.0:0              LISTENING       8908
+$ tasklist /FI "PID eq 24124" /FO TABLE /NH                       # ③ PID → 프로그램 이름
+com.docker.backend.exe       24124 Console                    1    163,344 K
+
+$ docker rm web-conflict && docker stop web-8080                   # ④ 해제: 점유 컨테이너를 멈춤
+$ docker run -d -p 8080:80 --name web-conflict codyssey-web:1.0    # ⑤ 재시도 → 성공
+$ curl -s -m 3 -o /dev/null -w "%{http_code}\n" http://localhost:8080
+200
+```
+
+> 점유 PID가 `com.docker.backend.exe`나 `wslrelay.exe`(Docker Desktop의 포트 전달 프로세스)라면 **프로세스를 kill하지 않습니다.** `com.docker.backend.exe`를 종료하면 Docker 엔진이 멈추고, `wslrelay.exe`를 종료하면 포트 전달이 끊길 수 있기 때문입니다. 대신 ①의 컨테이너를 `docker stop`/`docker rm` 하거나 다른 호스트 포트를 씁니다. `wslrelay.exe`의 `127.0.0.1:8080` 리스닝은 컨테이너를 지운 뒤에도 남아 있었지만, 같은 포트로 재실행해 HTTP 200을 확인하는 데는 문제가 없었습니다(로그 참고).
+
+**B. Docker가 아닌 프로그램이 점유한 경우 → 프로세스 종료 (WSL Ubuntu, `ss`/`lsof`)** · 로그 요약 발췌
+
+```bash
+$ python3 -m http.server 8084 --bind 0.0.0.0 2>&1 | tail -1         # 이미 다른 python3가 8084 사용 중
+OSError: [Errno 98] Address already in use
+
+$ ss -ltnp "sport = :8084"                                         # ① 점유 프로세스 확인
+LISTEN 0      5            0.0.0.0:8084      0.0.0.0:*    users:(("python3",pid=450,fd=3))
+$ lsof -nP -iTCP:8084 -sTCP:LISTEN                                 # ② 같은 정보를 lsof로
+python3 450 dkswo 3u  IPv4  20084      0t0  TCP *:8084 (LISTEN)
+
+$ ps -o pid,cmd -p 450 && kill 450                                 # ③ 무엇인지 확인한 뒤 종료
+    450 python3 -m http.server 8084 --bind 0.0.0.0
+$ ss -ltn "sport = :8084" | tail -n +2 | grep -q . || echo "8084 LISTEN 없음 (해제됨)"
+8084 LISTEN 없음 (해제됨)
+재시도 → HTTP 200                                                   # ④ 다시 띄우니 정상
+```
+
+| 환경 | 점유 확인 | PID → 프로그램 | 해제 |
+|---|---|---|---|
+| Docker 컨테이너 | `docker ps --filter publish=8080` | (이름이 바로 나옴) | `docker stop <이름>` / `docker rm -f <이름>` |
+| Windows | `netstat -ano \| findstr :8080` (PowerShell: `Get-NetTCPConnection -LocalPort 8080`) | `tasklist /FI "PID eq <PID>"` | `taskkill /PID <PID> /F` (Docker 프로세스 제외) |
+| Linux / WSL | `ss -ltnp "sport = :8080"` 또는 `lsof -i :8080` | `ps -o pid,cmd -p <PID>` | `kill <PID>` (안 되면 `kill -9`) |
+| macOS | `lsof -nP -iTCP:8080 -sTCP:LISTEN` | `ps -p <PID>` | `kill <PID>` |
+
+> 참고: Windows에서 python을 `0.0.0.0:8083`에 먼저 띄운 뒤 Docker로 같은 포트를 publish했을 때는 **충돌 오류가 나지 않았습니다.** Windows 소켓 공유 동작 때문으로 보이며, 이 경우 어느 쪽이 응답할지 보장되지 않으므로 같은 포트를 겹쳐 쓰지 않도록 위 표로 먼저 확인합니다. 그래서 프로세스 종료 실습(B)은 같은 주소·포트에 공유 옵션 없이 바인딩하면 충돌이 그대로 재현되는 WSL Ubuntu에서 했습니다. ([09 로그 C](logs/09_port_conflict.md))
 
 ---
 
@@ -389,6 +486,15 @@ cat: /tmp/x.txt: No such file or directory   # 컨테이너 레이어에만 쓴 
 - **바인드 마운트**는 호스트의 특정 폴더를 그대로 연결합니다. 개발 중에 소스를 수정하면 바로 반영해야 할 때 씁니다.
 - **볼륨**은 Docker가 관리하는 저장소(`/var/lib/docker/volumes/...`)이고 컨테이너의 수명과 분리되어 있습니다. DB 데이터나 업로드 파일처럼 **컨테이너를 교체해도 유지해야 하는 데이터**에 씁니다.
 
+| | 바인드 마운트 | 볼륨 |
+|---|---|---|
+| 저장 위치 | 내가 지정한 호스트 폴더 | Docker가 관리 (`/var/lib/docker/volumes/...`) |
+| 장점 | 호스트에서 수정하면 즉시 반영, 파일을 바로 열어 볼 수 있음 | 호스트 경로와 무관해 이식성 좋음, 컨테이너 수명과 분리 |
+| 단점 | 호스트 경로·OS(Windows 경로 표기)에 종속 | 호스트에서 파일을 바로 보기 불편 |
+| 권장 | **개발**: 소스 코드·정적 파일을 고치며 확인할 때 | **운영**: DB 데이터·업로드 파일처럼 보존해야 할 데이터 |
+
+**이미지 변경 vs 컨테이너 변경** ([10_supplement.md](logs/10_supplement.md)): 컨테이너 안에서 `docker exec`로 `index.html`을 `changed-in-container`로 바꿔도, 그 컨테이너를 지우고 같은 이미지로 새로 띄우면 원래 `<h1>Hello, Codyssey! 🐳</h1>`가 나옵니다. 변경은 그 컨테이너의 쓰기 레이어에만 있었기 때문입니다. 내용을 영구히 바꾸려면 `app/site/`를 고친 뒤 `docker build`로 **이미지를 다시 빌드**해야 합니다.
+
 ---
 
 ## 9. Git 설정 및 GitHub/VSCode 연동
@@ -425,6 +531,22 @@ $ curl -s -o /dev/null -w "%{http_code}\n" https://github.com/dkswogns1234-debug
 ```
 
 ![GitHub 저장소 페이지 (Public, main 브랜치 push 완료)](docs/screenshots/github-repo.png)
+
+**커밋 → push 흐름 (이력)**
+
+```bash
+$ git add README.md
+$ git commit -m "README 경로 예시 수정: 실습 로그와 같게 cd .. 추가"
+$ git push origin main
+To https://github.com/dkswogns1234-debug/codyssey-workstation.git
+   3e7985d..e7fe77d  main -> main
+$ git log --oneline
+e7fe77d README 경로 예시 수정: 실습 로그와 같게 cd .. 추가
+3e7985d 스크린샷(브라우저 접속, GitHub 저장소) 추가 및 GitHub 연동 기록
+d96dc63 개발 워크스테이션 미션: 터미널/권한/Docker/Dockerfile/포트/마운트/볼륨/Compose 실습 및 기술 문서
+```
+
+위 출력은 2026-11-14 실제 터미널 실행 결과를 옮긴 것이며, 실행 후 이력은 [10 로그](logs/10_supplement.md)에 `git log`로 남겼습니다. 사전평가 보완 내용도 같은 흐름(`add → commit → push`)으로 반영합니다. 최신 이력은 저장소의 Commits 탭에서 확인할 수 있습니다.
 
 ### Git과 GitHub의 역할 차이
 
@@ -470,6 +592,14 @@ $ docker compose down
 
 ## 11. 트러블슈팅
 
+| 우선순위 | 증상 | 첫 확인 명령 | 예상 소요(경험 기준 추정) |
+|---|---|---|---|
+| 1 (모든 Docker 작업 차단) | `docker info` 연결 실패 | `docker info`, Docker Desktop 실행 여부 | 1~3분 (엔진 기동 대기) |
+| 2 (실습 결과가 틀어짐) | Git Bash에서 `chmod` 미반영 | `uname -a`, `stat -c "%A %a"` | 5분 (WSL로 이동) |
+| 2 | 경로 앞에 `C:/Program Files/Git` | 오류 메시지의 경로 확인 | 1분 (`MSYS_NO_PATHCONV=1`) |
+| 2 | `port is already allocated` | `docker ps --filter publish=<포트>`, `netstat -ano` | 2~5분 (트러블슈팅 5) |
+| 3 (기록만 불편) | `--format`의 `\n` 미해석 | 출력 확인 | 1분 (`grep`으로 대체) |
+
 ### 트러블슈팅 1 – Docker 데몬에 연결할 수 없음
 
 - **문제**: `docker info`를 실행하면 Client 정보만 나오고, Server 항목에서 아래 오류가 발생했습니다.
@@ -481,6 +611,7 @@ $ docker compose down
 - **확인**: `docker --version`은 정상이었고(클라이언트만 확인하는 명령), 데몬과 통신하는 `docker ps`는 같은 오류로 실패했습니다. 오류 메시지의 named pipe(`dockerDesktopLinuxEngine`)가 없다는 것은 엔진 프로세스가 없다는 뜻입니다.
 - **해결**: Docker Desktop을 실행하고 엔진이 뜰 때까지 `docker info`로 반복 확인한 뒤 진행했습니다. → `Server Version: 29.9.3`
 - **배운 점**: Docker는 **클라이언트와 서버(데몬) 구조**입니다. `--version`이 된다고 Docker를 쓸 수 있는 상태는 아니고, 데몬 점검은 `docker info`로 해야 합니다.
+- **다음에 같은 증상이면 (복구 순서)**: ① `docker info`로 Server 항목 확인 → ② Docker Desktop 실행(이미 켜져 있으면 트레이 메뉴 Restart) → ③ 30초 간격으로 `docker info` 재확인 → ④ 계속 실패하면 PowerShell에서 `wsl -l -v`로 `docker-desktop`이 `Running`인지 확인, 필요하면 `wsl --shutdown` 후 Docker Desktop 재실행 → ⑤ Docker Desktop의 Troubleshoot 메뉴에서 로그 확인. (2026-11-14 재점검 때도 ①에서 실패 → ② 실행 후 5초 간격 첫 확인에서 `29.9.3` 확인, [10 로그](logs/10_supplement.md))
 
 ### 트러블슈팅 2 – Git Bash에서 `chmod`가 적용되지 않음
 
@@ -512,6 +643,14 @@ $ docker compose down
 - **원인 및 확인**: Go 템플릿과 셸의 큰따옴표는 `\n`을 줄바꿈으로 해석하지 않습니다.
 - **해결**: 전체 `docker info` 출력에서 `grep -E`로 필요한 줄만 골라 기록했습니다.
 
+### 트러블슈팅 5 – `port is already allocated` (일부러 재현)
+
+- **문제**: 이미 `web-8080`이 8080을 쓰는 상태에서 같은 포트로 컨테이너를 하나 더 실행하자 `Bind for 0.0.0.0:8080 failed: port is already allocated`가 발생했습니다.
+- **원인 가설**: 같은 호스트 포트를 다른 컨테이너나 프로세스가 이미 점유하고 있다.
+- **확인**: `docker ps --filter publish=8080`으로 `web-8080`을, `netstat -ano` + `tasklist`로 OS에서 LISTEN 중인 프로세스(`com.docker.backend.exe`)를 확인했습니다.
+- **해결**: Docker 프로세스는 종료하지 않고 점유 컨테이너를 `docker stop` 한 뒤 재실행해 `200`을 확인했습니다. Docker가 아닌 프로그램이 점유한 경우는 WSL에서 `ss`/`lsof`로 PID를 찾아 `kill`로 해제했습니다. ([포트 충돌 진단과 해제](#포트-충돌-진단과-해제), [09 로그](logs/09_port_conflict.md))
+- **배운 점**: 기동 직후 확인용 `curl`에는 `-m 3`처럼 시간 제한을 둡니다. 제한 없이 반복 대기하다가 응답을 무한정 기다리는 상황을 실제로 겪었습니다.
+
 ---
 
 ## 12. 검증 방법 요약
@@ -528,6 +667,10 @@ $ docker compose down
 | 바인드 마운트 | 호스트 파일 수정 후 `curl` | 재시작 없이 v1 → v2 | [06](logs/06_bind_volume.md) |
 | 볼륨 영속성 | rm 후 새 컨테이너에서 `cat` | 같은 타임스탬프 데이터 유지 | [06](logs/06_bind_volume.md) |
 | Git 설정 | `git config --list`, `git branch --show-current` | 기본 브랜치 main | [08](logs/08_git.md) |
+| 포트 충돌 진단 | `docker ps --filter publish`, `netstat -ano`, `ss -ltnp`, `lsof` | 점유 주체 확인 → 해제 → 재시도 200 | [09](logs/09_port_conflict.md) |
+| hello-world 직후 | `docker ps -a` | `/hello` 컨테이너가 `Exited (0)`로 남음 | [10](logs/10_supplement.md) |
+| 이미지 식별 | `docker image inspect` | 태그·ID·Env·ExposedPorts·Labels | [10](logs/10_supplement.md) |
+| 이미지 vs 컨테이너 | `docker exec`로 수정 후 새 컨테이너 | 수정은 사라지고 원본 유지 | [10](logs/10_supplement.md) |
 
 ## 13. 재현 방법
 
@@ -541,6 +684,15 @@ docker rm -f web-8080
 # 보너스
 docker compose up -d && docker compose ps && docker compose down
 ```
+
+**환경별 주의 (바인드 마운트 경로 예시)**
+
+| 환경 | 바인드 마운트 경로 쓰는 법 | 주의 |
+|---|---|---|
+| Windows · Git Bash | `-v "$(pwd -W)/bind-demo:/usr/share/nginx/html:ro"` | 먼저 `export MSYS_NO_PATHCONV=1` (경로 자동 변환 방지) |
+| Windows · PowerShell | `-v "${PWD}/bind-demo:/usr/share/nginx/html:ro"` | `\` 대신 `/`를 써도 됨 |
+| WSL Ubuntu | `-v "$(pwd)/bind-demo:/usr/share/nginx/html:ro"` | 프로젝트를 `/mnt/c`가 아닌 `~` 아래에 두면 파일 반영·권한이 정확 |
+| macOS (OrbStack/Docker Desktop) | `-v "$(pwd)/bind-demo:/usr/share/nginx/html:ro"` | 포트 점유 확인은 `lsof -nP -iTCP:8080 -sTCP:LISTEN` |
 
 ## 14. 보안 및 개인정보
 
